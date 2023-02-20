@@ -1,12 +1,3 @@
-import { IArgument } from './Argument';
-import { IOptions } from './Options';
-import { IVariables } from './Variables';
+import { Schema } from './Schema';
 
-export interface IOperation {
-  name: string;
-  alias?: string;
-  args?: IArgument;
-  fields: string[];
-  options?: IOptions;
-  variables?: IVariables;
-}
+export type IOperation = Schema;

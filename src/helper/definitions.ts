@@ -6,5 +6,5 @@ export function definition(obj: IVariable): string {
 }
 
 export function definitions(variables: IVariable[]): string {
-  return `(${variables.map((variable) => definition(variable)).join(', ')})`;
+  return `${variables.map((variable) => definition(variable)).join(', ')}`;
 }

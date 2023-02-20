@@ -13,6 +13,10 @@ export enum QueryType {
 export interface IQuery {
   type: QueryType;
   name?: string;
-  query: IOperation | IOperation[];
+  operations: IOperation | IOperation[];
 }
 // export type IQuery = Record<QueryType, IOperation>
+
+export function isQueryType(type: QueryType | any): type is QueryType {
+  return Object.values(QueryType).includes(type);
+}
