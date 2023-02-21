@@ -6,7 +6,18 @@ const customersQuery: IQuery = {
   name: 'GetCustomers',
   operations: {
     name: 'customers',
-    fields: ['id'],
+    fields: [
+      {
+        name: "results",
+        fields: ['id', "key", "name" , {
+          name: "custom",
+          args: {
+            includeNames: ["custom1", "custom2"]
+          },
+          fields: ["name", "value"]
+        }],
+      }
+    ],
     variables: [
       {
         name: 'where',

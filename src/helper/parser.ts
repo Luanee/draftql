@@ -45,6 +45,8 @@ export class GraphQLRequestBuilder {
     variables: GraphQLVariableBuilder;
     fields: GraphQLFieldBuilder;
   };
+  elements: string[] = []
+  variables?: Record<string, any>
 
   constructor(graphql: IQuery) {
     this.type = graphql.type;
@@ -63,28 +65,42 @@ export class GraphQLRequestBuilder {
       throw Error(`Query type must be one of: ${Object.values(QueryType).join(', ')}`);
     }
     this.buildd(this.operations);
+    console.log(this.elements)
     return {
       query: this.operation(this.operationFields(), this.operationArguments()),
       variables: this.builder.variables.variables(),
     };
   }
 
-  buildd(operations: Schema[]) {
+  buildd(operations: Schema[], variables?: Record<string, any>) {
+
     operations.forEach((operation) => {
+    this.elements.push(operation.name)
       if (operation.variables && operation.variables.length) {
+        if (!this.variables) {
+          this.variables = {}
+        }
+
         this.builder.variables.addVariables(operation.name, operation.variables);
+        this.variables = {...this.variables, ...operation.variables}
+
+        const d = this.builder.variables.buildDefinitions(operation.variables)
+        this.elements.push(`(${d.join(", ")})`)
       }
 
+      this.elements.push("{")
       if (operation.fields.length) {
         operation.fields.forEach((field) => {
           if (Validator.isSchema(field)) {
-            this.buildd([field]);
+            this.buildd([field], variables);
           } else {
-            console.log(field);
+            this.elements.push(field)
           }
         });
       }
     });
+
+    this.elements.push("}")
   }
 
   private operation(fields: string, definitions: string): string {
@@ -93,7 +109,7 @@ export class GraphQLRequestBuilder {
   }
 
   private operationArguments(): string {
-    return this.builder.variables.hasvariables() ? `(${this.builder.variables.definitions()})` : '';
+    return this.builder.variables.hasVariables() ? `(${this.builder.variables.definitions()})` : '';
   }
 
   private operationFields() {
@@ -112,14 +128,14 @@ export class GraphQLVariableBuilder {
   constructor() {}
 
   definitions(): string {
-    return this.hasvariables() ? this.stringifyDefinitions(Object.values(this.definitionMap).flat()) : '';
+    return this.hasVariables() ? this.stringifyDefinitions(Object.values(this.definitionMap).flat()) : '';
   }
 
   variables(): Record<string, any> | undefined {
     return this.container ? this.sortVariables(this.container) : undefined;
   }
 
-  hasvariables(): boolean {
+  hasVariables(): boolean {
     return !!Object.keys(this.definitionMap).length;
   }
 
@@ -164,7 +180,7 @@ export class GraphQLVariableBuilder {
     return Object.fromEntries(Object.entries(variables).sort(([key1], [key2]) => key1.localeCompare(key2)));
   }
 
-  private buildDefinition(variable: IArgument | IVariable): string {
+  buildDefinition(variable: IArgument | IVariable): string {
     if (Validator.isVariable(variable)) {
       return `$${variable.name}: ${variable.type}${variable.required ? '!' : ''}`;
     }
@@ -173,7 +189,7 @@ export class GraphQLVariableBuilder {
     return this.stringifyDefinitions(definitons);
   }
 
-  private buildDefinitions(variables: IVariable[]): string[] {
+  buildDefinitions(variables: IVariable[]): string[] {
     return variables.map((variable) => this.buildDefinition(variable));
   }
 }
