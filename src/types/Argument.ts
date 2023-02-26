@@ -1,8 +1,8 @@
 import { IVariable } from './Variable';
 
-type Primitive = string | number | boolean;
 type OneOrMore<T> = T | T[];
+export type Primitive = string | number | boolean;
 
-export type IArguments = Record<string, OneOrMore<Primitive | IVariable | any>>;
-export type IArgument = IArgument[];
+export type IArgument = OneOrMore<Primitive | IVariable | any>;
+export type IArguments = Record<string, IArgument>;
 // export type IArgument = Record<string, OneOrMore<Primitive | IVariable>>;

@@ -6,17 +6,26 @@ const customersQuery: IQuery = {
   name: 'GetCustomers',
   operations: {
     name: 'customers',
+    args: {
+      offset: 0,
+      sort: { name: 'asc' },
+    },
     fields: [
       {
-        name: "results",
-        fields: ['id', "key", "name" , {
-          name: "custom",
-          args: {
-            includeNames: ["custom1", "custom2"]
+        name: 'results',
+        fields: [
+          'id',
+          'key',
+          'name',
+          {
+            name: 'custom',
+            args: {
+              includeNames: ['custom1', 'custom2'],
+            },
+            fields: ['name', 'value'],
           },
-          fields: ["name", "value"]
-        }],
-      }
+        ],
+      },
     ],
     variables: [
       {
@@ -31,6 +40,12 @@ const customersQuery: IQuery = {
         value: 'DE',
         required: true,
       },
+      {
+        name: 'limit',
+        type: 'Long',
+        value: 1,
+        required: true,
+      },
     ],
   },
 };
@@ -40,17 +55,15 @@ const updateProductMutation: IQuery = {
   name: 'AddProductVariant',
   operations: {
     name: 'updateProduct',
-    args: [
-      {
-        version: 1,
-      },
-      {
+    args: {
+      version: 1,
+      id: {
         name: 'id',
         type: 'String',
         value: 'ID',
         required: true,
       },
-      {
+      actions: {
         name: 'actions',
         type: 'Actions',
         value: [
@@ -64,7 +77,7 @@ const updateProductMutation: IQuery = {
         ],
         required: true,
       },
-    ],
+    },
     fields: [
       'id',
       'version',

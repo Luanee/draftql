@@ -1,4 +1,4 @@
-import { Schema, IQuery, IVariable, QueryType, isQueryType, IArgument } from '../types';
+import { Schema, IQuery, IVariable, QueryType, isQueryType, IArgument, Primitive } from '../types';
 import { definitions } from './definitions';
 
 export function buildGraphQLQuery(graphql: IQuery): {
@@ -45,8 +45,8 @@ export class GraphQLRequestBuilder {
     variables: GraphQLVariableBuilder;
     fields: GraphQLFieldBuilder;
   };
-  elements: string[] = []
-  variables?: Record<string, any>
+  elements: string[] = [];
+  variables?: Record<string, any>;
 
   constructor(graphql: IQuery) {
     this.type = graphql.type;
@@ -60,47 +60,77 @@ export class GraphQLRequestBuilder {
     }
   }
 
-  build(): { query: string; variables: Record<string, any> | undefined } {
+  build(options: { pretty: boolean } = { pretty: false }): {
+    query: string;
+    variables: Record<string, any> | undefined;
+  } {
     if (!isQueryType(this.type)) {
       throw Error(`Query type must be one of: ${Object.values(QueryType).join(', ')}`);
     }
-    this.buildd(this.operations);
-    console.log(this.elements)
+    this.buildV2(this.operations);
+    console.log(this.elements);
     return {
       query: this.operation(this.operationFields(), this.operationArguments()),
       variables: this.builder.variables.variables(),
     };
   }
 
-  buildd(operations: Schema[], variables?: Record<string, any>) {
-
+  buildV2(operations: Schema[], variables?: Record<string, any>) {
     operations.forEach((operation) => {
-    this.elements.push(operation.name)
+      this.elements.push(operation.name);
       if (operation.variables && operation.variables.length) {
         if (!this.variables) {
-          this.variables = {}
+          this.variables = {};
         }
 
         this.builder.variables.addVariables(operation.name, operation.variables);
-        this.variables = {...this.variables, ...operation.variables}
 
-        const d = this.builder.variables.buildDefinitions(operation.variables)
-        this.elements.push(`(${d.join(", ")})`)
+        console.log('variables', this.builder.variables.variables());
+        // this.variables = { ...this.variables, ...this.builder.variables.variables() };
       }
 
-      this.elements.push("{")
+      if (operation.args && Object.keys(operation.args).length) {
+        if (!this.variables) {
+          this.variables = {};
+        }
+
+        const argsAndVariables = Object.keys(operation.args).map((key) => {
+          return operation.args![key];
+        });
+
+        const variables = argsAndVariables.filter(Validator.isVariable);
+        const args = argsAndVariables.filter((arg) => !Validator.isVariable(arg));
+
+        if (variables.length) {
+          this.builder.variables.addVariables(operation.name, variables);
+          console.log('args', variables);
+          // this.variables = { ...this.variables, ...this.builder.variables.variables() };
+        }
+
+        if (args.length) {
+          this.builder.variables.addDefinitions(operation.name, args);
+          console.log('args', args);
+          // this.variables = { ...this.variables, ...this.builder.variables.variables() };
+        }
+      }
+
+      if (this.builder.variables.hasDefinitions(operation.name)) {
+        this.elements.push(this.builder.variables.getDefinitions(operation.name));
+      }
+
+      this.elements.push('{');
       if (operation.fields.length) {
         operation.fields.forEach((field) => {
           if (Validator.isSchema(field)) {
-            this.buildd([field], variables);
+            this.buildV2([field], variables);
           } else {
-            this.elements.push(field)
+            this.elements.push(field);
           }
         });
       }
     });
 
-    this.elements.push("}")
+    this.elements.push('}');
   }
 
   private operation(fields: string, definitions: string): string {
@@ -109,7 +139,7 @@ export class GraphQLRequestBuilder {
   }
 
   private operationArguments(): string {
-    return this.builder.variables.hasVariables() ? `(${this.builder.variables.definitions()})` : '';
+    return this.builder.variables.hasDefinitions() ? `(${this.builder.variables.definitions()})` : '';
   }
 
   private operationFields() {
@@ -123,27 +153,52 @@ export class GraphQLVariableBuilder {
   }
 
   definitionMap: Record<string, string[]> = {};
-  container?: Record<string, any>;
+  container: Record<string, Record<string, any>> = {};
 
   constructor() {}
 
   definitions(): string {
-    return this.hasVariables() ? this.stringifyDefinitions(Object.values(this.definitionMap).flat()) : '';
+    return this.hasDefinitions() ? this.stringifyDefinitions(Object.values(this.definitionMap).flat()) : '';
   }
 
   variables(): Record<string, any> | undefined {
     return this.container ? this.sortVariables(this.container) : undefined;
   }
 
-  hasVariables(): boolean {
-    return !!Object.keys(this.definitionMap).length;
+  hasDefinitions(name?: string): boolean {
+    if (!name) {
+      return !!Object.keys(this.definitionMap).length;
+    }
+
+    return !!(name in this.definitionMap);
+  }
+
+  getDefinitions(name?: string): string {
+    if (!this.hasDefinitions(name)) {
+      return '';
+    }
+
+    const definitions = !name ? Object.values(this.definitionMap).flat() : this.definitionMap[name];
+
+    return `(${this.stringifyDefinitions(definitions)})`;
+  }
+
+  getVariables(name: string): Record<string, any> {
+    if (!this.container || !(name in this.container)) {
+      return {};
+    }
+    return this.sortVariables(this.container)[name];
   }
 
   addVariables(name: string, variables: IVariable[]): this {
     this.addDefinitions(name, variables);
 
-    this.container = {
-      ...this.container,
+    if (!(name in this.container)) {
+      this.container[name] = {};
+    }
+
+    this.container[name] = {
+      ...this.container[name],
       ...variables.reduce((con, obj) => {
         con[obj.name] = obj.value;
         return con;
@@ -180,17 +235,21 @@ export class GraphQLVariableBuilder {
     return Object.fromEntries(Object.entries(variables).sort(([key1], [key2]) => key1.localeCompare(key2)));
   }
 
-  buildDefinition(variable: IArgument | IVariable): string {
+  private buildDefinitions(variables: IArguments | IVariable[]): string[] {
+    if (Array.isArray(variables)) {
+      return variables.map((variable) => this.buildDefinition(variable));
+    }
+
+    return Object.entries(variables).map(([name, value]) => this.buildDefinition({ name, value }));
+  }
+
+  private buildDefinition(variable: { name: string; value: any } | IVariable): string {
     if (Validator.isVariable(variable)) {
       return `$${variable.name}: ${variable.type}${variable.required ? '!' : ''}`;
     }
-
-    const definitons = Object.entries(variable).map(([name, value]) => `$${name}: ${value}`);
-    return this.stringifyDefinitions(definitons);
-  }
-
-  buildDefinitions(variables: IVariable[]): string[] {
-    return variables.map((variable) => this.buildDefinition(variable));
+    return `${variable.name}: ${variable.value}`;
+    // const definitions = Object.entries(variable).map(([name, value]) => `$${name}: ${value}`);
+    // return this.stringifyDefinitions(definitions);
   }
 }
 
@@ -203,7 +262,7 @@ export class GraphQLFieldBuilder {
 }
 
 export class Validator {
-  public static isVariable(argument: IArgument | IVariable): argument is IVariable {
+  public static isVariable(argument: unknown): argument is IVariable {
     const variable = argument as IVariable;
     return variable.name && variable.type && typeof variable.required === 'boolean' && variable.value;
   }
